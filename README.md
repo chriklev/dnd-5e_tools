@@ -1,5 +1,5 @@
-# dnd-5e_tools
+# dnd-5e tools
 
 This repository will include tools to ease the pain of playing DnD. There are no currently working tools.
-working on:
+##Working on:
 - Character creator
