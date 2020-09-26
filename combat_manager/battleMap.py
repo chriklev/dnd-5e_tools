@@ -39,3 +39,4 @@ class Dirt(Solid):
 class Grass(Dirt):
     def __init__(self):
         super().__init__()
+        self.sprite_path = 'resources/grass.jpg'
