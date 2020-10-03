@@ -22,15 +22,15 @@ def line_segment_intersection(x1, y1, x2, y2, x3, y3, x4, y4):
     denominator = (x4-x3)*(y1-y2) - (x1-x2)*(y4-y3)
     if denominator == 0:
         print("Parralelle linjer møtes ikke...")
-        return None
+        return 9999999, 9999999
 
     ta = ((y3-y4)*(x1-x3) + (x4-x3)*(y1-y3)) / denominator
     tb = ((y1-y2)*(x1-x3) + (x2-x1)*(y1-y3)) / denominator
     return ta, tb
 
 
-def sort_points_by_angle(origin_x, orogin_y, points_x, points_y):
-    """ Sorts points by the angle from an origin.
+def get_angle_to_points(origin_x, origin_y, points_x, points_y):
+    """ Get angles from some point to others
 
     numpy.arctan2() returns angle values from -pi to pi, so in a normal cartesian coordiante system
     with positive x going right, and positive y going up, the points are sorted counter clockwise
@@ -43,42 +43,141 @@ def sort_points_by_angle(origin_x, orogin_y, points_x, points_y):
         points_y: numpy array of floats with the y values of the points
 
     Returns:
-        numpy array of integers containing the indices of the sorted angles.
+        numpy array of floats containing the angles in radians.
     """
     points_delta_x = points_x - origin_x
     points_delta_y = points_y - origin_y
-    angles = np.arctan2(points_delta_y, points_delta_x)
-    return np.argsort(angles)
+    return np.arctan2(points_delta_y, points_delta_x)
 
 
-def get_vision_polygon(origin_x, origin_y, points_x, points_y, walls):
+def get_closest_intersection(origin_x, origin_y, i, points_x, points_y, connections):
+    smallest_ta = 9999999999
+    checked = [i]
+
+    for j, neighbors in enumerate(connections):
+        if j != i:
+            for k in neighbors:
+                if k not in checked:
+                    ta, tb = line_segment_intersection(origin_x, origin_y,
+                                                       points_x[i], points_y[i],
+                                                       points_x[j], points_y[j],
+                                                       points_x[k], points_y[k])
+                    # if the wall is somewhere on the line
+                    if tb >= 0 and tb <= 1:
+                        # if the wall is in front of us
+                        if ta >= 0:
+                            # if the wall is blocking our point
+                            if ta <= 1:
+                                return None
+                            elif ta < smallest_ta:
+                                smallest_ta = ta
+            checked.append(j)
+    return smallest_ta
+
+
+def get_vision_polygon(origin_x, origin_y, points_x, points_y, connections):
     polygon_corners_x = []
     polygon_corners_y = []
 
-    i_sorted = sort_points_by_angle(origin_x, origin_y, points_x, points_y)
+    angles = get_angle_to_points(origin_x, origin_y, points_x, points_y)
+    i_sorted = np.argsort(angles)
+
     for i in i_sorted:
-        not_blocked = True
-        back_walls = {}
+        smallest_ta = get_closest_intersection(
+            origin_x, origin_y, i, points_x, points_y, connections)
+        if smallest_ta is not None:
+            # If there is only one connection:
+            if len(connections[i]) == 1:
+                back_x = origin_x * (1-smallest_ta) + points_x[i]*smallest_ta
+                back_y = origin_y * (1-smallest_ta) + points_y[i]*smallest_ta
 
-        for p1, p2 in walls:
-            ta, tb = line_segment_intersection(origin_x, origin_y,
-                                               points_x[i], points_y[i],
-                                               p1[0], p1[1],
-                                               p2[0], p2[1])
-            # if the wall is somewhere on the line
-            if tb >= 0 and tb <= 1:
-                # if the wall is in front of us
-                if ta >= 0:
-                    # if the wall is blocking our point
-                    if ta <= 1:
-                        not_blocked = False
-                        break
-                    back_walls[p1, p2] = ta
+                relative_angle = angles[connections[i][0]] - angles[i]
+                if relative_angle > np.pi:
+                    relative_angle -= 2*np.pi
+                elif relative_angle < -np.pi:
+                    relative_angle += 2*np.pi
 
-        if not_blocked:
+                if relative_angle < 0:
+                    polygon_corners_x.append(points_x[i])
+                    polygon_corners_y.append(points_y[i])
+                    polygon_corners_x.append(back_x)
+                    polygon_corners_y.append(back_y)
+                else:
+                    polygon_corners_x.append(back_x)
+                    polygon_corners_y.append(back_y)
+                    polygon_corners_x.append(points_x[i])
+                    polygon_corners_y.append(points_y[i])
+            # If there are two connections:
+            else:
+                first_neighbor_is_before = \
+                    angles[connections[i][0]] < angles[i]
+                second_neighbor_is_before = \
+                    angles[connections[i][1]] < angles[i]
+                # If the neighboring points are on both sides of the current point
+                if first_neighbor_is_before ^ second_neighbor_is_before:
+                    polygon_corners_x.append(points_x[i])
+                    polygon_corners_y.append(points_y[i])
+                else:
+                    back_x = \
+                        origin_x * (1-smallest_ta) + points_x[i]*smallest_ta
+                    back_y = \
+                        origin_y * (1-smallest_ta) + points_y[i]*smallest_ta
+                    # TODO: Fix relative point stuff
+                    if first_neighbor_is_before and second_neighbor_is_before:
+                        polygon_corners_x.append(points_x[i])
+                        polygon_corners_y.append(points_y[i])
+                        polygon_corners_x.append(back_x)
+                        polygon_corners_y.append(back_y)
+                    else:
+                        polygon_corners_x.append(back_x)
+                        polygon_corners_y.append(back_y)
+                        polygon_corners_x.append(points_x[i])
+                        polygon_corners_y.append(points_y[i])
+
+    return polygon_corners_x, polygon_corners_y
 
 
 if __name__ == "__main__":
-    x1, y1, x2, y2 = 2., 2., 3., 3.
-    x3, y3, x4, y4 = 3., 4., 4., 3.
-    print(line_segment_intersection(x1, y1, x2, y2, x3, y3, x4, y4))
+    points_x = np.array([0, 5, 5, 0, 2, 1, 2, 3, 4])
+    points_y = np.array([0, 0, 5, 5, 2, 3, 3, 3, 2])
+    connections = [
+        [3, 1],
+        [0, 2],
+        [1, 3],
+        [2, 0],
+        [5],
+        [4],
+        [7],
+        [6, 8],
+        [7]
+    ]
+
+    vision_origin_x = 2
+    vision_origin_y = 2.5
+
+    polygon_x, polygon_y = get_vision_polygon(
+        vision_origin_x, vision_origin_y, points_x, points_y, connections
+    )
+    for i, point in enumerate(zip(polygon_x[:9] + polygon_x[10:], polygon_y[:9] + polygon_y[10:])):
+        print(i+1, point)
+
+    from matplotlib.patches import Polygon
+    import matplotlib.pyplot as plt
+
+    checked = []
+    for i, neighbors in enumerate(connections):
+        for j in neighbors:
+            if j not in checked:
+                plt.plot([points_x[i], points_x[j]],
+                         [points_y[i], points_y[j]],
+                         c="red",
+                         linewidth=3,
+                         zorder=5)
+        checked.append(i)
+
+    plt.fill(polygon_x[:9] + polygon_x[10:],
+             polygon_y[:9] + polygon_y[10:], zorder=0)
+    plt.scatter([vision_origin_x], [vision_origin_y],
+                marker='*', s=200, zorder=10)
+    plt.savefig(f"field-of-view-test-{vision_origin_x}{vision_origin_y}.png")
+    plt.show()
