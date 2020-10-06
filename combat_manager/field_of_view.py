@@ -1,3 +1,4 @@
+from matplotlib.patches import Polygon
 import numpy as np
 
 
@@ -65,9 +66,9 @@ def get_closest_intersection(origin_x, origin_y, i, points_x, points_y, connecti
                     # if the wall is somewhere on the line
                     if tb >= 0 and tb <= 1:
                         # if the wall is in front of us
-                        if ta >= 0:
+                        if ta > 0:
                             # if the wall is blocking our point
-                            if ta <= 1:
+                            if ta < 1:
                                 return None
                             elif ta < smallest_ta:
                                 smallest_ta = ta
@@ -109,12 +110,25 @@ def get_vision_polygon(origin_x, origin_y, points_x, points_y, connections):
                     polygon_corners_y.append(points_y[i])
             # If there are two connections:
             else:
+                first_relative_angle = angles[connections[i][0]] - angles[i]
+                if first_relative_angle > np.pi:
+                    first_relative_angle -= 2*np.pi
+                elif first_relative_angle < -np.pi:
+                    first_relative_angle += 2*np.pi
                 first_neighbor_is_before = \
-                    angles[connections[i][0]] < angles[i]
+                    first_relative_angle < 0
+
+                second_relative_angle = angles[connections[i][1]] - angles[i]
+                if second_relative_angle > np.pi:
+                    second_relative_angle -= 2*np.pi
+                elif second_relative_angle < -np.pi:
+                    second_relative_angle += 2*np.pi
                 second_neighbor_is_before = \
-                    angles[connections[i][1]] < angles[i]
+                    second_relative_angle < 0
+
                 # If the neighboring points are on both sides of the current point
                 if first_neighbor_is_before ^ second_neighbor_is_before:
+                    print("here")
                     polygon_corners_x.append(points_x[i])
                     polygon_corners_y.append(points_y[i])
                 else:
@@ -122,7 +136,6 @@ def get_vision_polygon(origin_x, origin_y, points_x, points_y, connections):
                         origin_x * (1-smallest_ta) + points_x[i]*smallest_ta
                     back_y = \
                         origin_y * (1-smallest_ta) + points_y[i]*smallest_ta
-                    # TODO: Fix relative point stuff
                     if first_neighbor_is_before and second_neighbor_is_before:
                         polygon_corners_x.append(points_x[i])
                         polygon_corners_y.append(points_y[i])
@@ -153,31 +166,14 @@ if __name__ == "__main__":
     ]
 
     vision_origin_x = 2
-    vision_origin_y = 2.5
+    vision_origin_y = 4
 
     polygon_x, polygon_y = get_vision_polygon(
         vision_origin_x, vision_origin_y, points_x, points_y, connections
     )
-    for i, point in enumerate(zip(polygon_x[:9] + polygon_x[10:], polygon_y[:9] + polygon_y[10:])):
+    for i, point in enumerate(zip(polygon_x, polygon_y)):
         print(i+1, point)
 
-    from matplotlib.patches import Polygon
-    import matplotlib.pyplot as plt
+    from testing_fov_animation import plot_fov
 
-    checked = []
-    for i, neighbors in enumerate(connections):
-        for j in neighbors:
-            if j not in checked:
-                plt.plot([points_x[i], points_x[j]],
-                         [points_y[i], points_y[j]],
-                         c="red",
-                         linewidth=3,
-                         zorder=5)
-        checked.append(i)
-
-    plt.fill(polygon_x[:9] + polygon_x[10:],
-             polygon_y[:9] + polygon_y[10:], zorder=0)
-    plt.scatter([vision_origin_x], [vision_origin_y],
-                marker='*', s=200, zorder=10)
-    plt.savefig(f"field-of-view-test-{vision_origin_x}{vision_origin_y}.png")
-    plt.show()
+    plot_fov(vision_origin_x, vision_origin_y, points_x, points_y, connections)
